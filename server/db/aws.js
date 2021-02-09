@@ -103,13 +103,13 @@ export async function getOrCreateDoc (docName) {
 
   const ydoc = new Y.Doc()
 
-  console.log("MICHAL: updates.length", updates.length);
+  //console.log("MICHAL: updates.length", updates.length);
 
   for (let i = 0; i < updates.length; i++) {
     Y.applyUpdate(ydoc, updates[i])
   }
 
-  ydoc.getArray('content').forEach(c => console.log([...c.entries()]))
+  //ydoc.getArray('content').forEach(c => console.log([...c.entries()]))
 
   return ydoc
 }
