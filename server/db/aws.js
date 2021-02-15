@@ -8,6 +8,7 @@ const ddb = new DynamoDBClient({
 })
 
 export async function addConnection (id, docName) {
+  console.log("MICHAL: docName", docName);
   await ddb.send(new PutItemCommand({
     TableName: process.env.CONNECTIONS_TABLE_NAME,
     Item: {
