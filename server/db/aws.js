@@ -132,7 +132,7 @@ export async function getDocsEvents(
 
   console.log("MICHAL: part", part);
 
-  if (!Items[0]) return null;
+  if (!Items[0]) return null; // If the data if not correct return an empty array
 
   const { Updates, LastDocPart } = Items[0];
   if (LastDocPart && LastDocPart.S && LastDocPart.S !== LAST_PART_PLACEHOLDER) {
@@ -283,10 +283,11 @@ export async function updateDoc(docName, update) {
     await saveUpdateToDb(docNameToUse, update);
   } catch (error) {
     console.log("MICHAL: error", error);
+    const errorMessage = error.message || error.errorMessage;
     if (
       error &&
-      error.message &&
-      error.message ===
+      errorMessage &&
+      errorMessage ===
         "Item size to update has exceeded the maximum allowed size"
     ) {
       const nextDocPart =
