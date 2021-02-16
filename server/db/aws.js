@@ -104,7 +104,7 @@ export async function getLastPartFromDoc(docName) {
 
   return (
     (Items && Items[0] && Items[0].LastDocPart && Items[0].LastDocPart.S) ||
-    LAST_PART_PLACEHOLDER
+    null
   );
 }
 
@@ -246,9 +246,33 @@ const saveUpdateToDb = async (docName, update) => {
   );
 };
 
+const setLastDocPartToDb = async (docName, part) => {
+  await ddb.send(
+    new UpdateItemCommand({
+      TableName: process.env.DOCS_TABLE_NAME,
+      UpdateExpression: "SET LastDocPart = :attrValue",
+      Key: {
+        PartitionKey: {
+          S: docName,
+        },
+      },
+      ExpressionAttributeValues: {
+        ":attrValue": {
+          S: part,
+        },
+      },
+    })
+  );
+};
+
 export async function updateDoc(docName, update) {
-  const documentPartToWriteTo = await getLastPartFromDoc(docName);
-  console.log("MICHAL: documentPartToWriteTo", documentPartToWriteTo);
+  let documentPartToWriteTo = await getLastPartFromDoc(docName);
+
+  if (documentPartToWriteTo === null) {
+    await setLastDocPartToDb(docName, LAST_PART_PLACEHOLDER);
+    await createNewDoc(`${docName}${docPartSplitCharacter}1`); // Create empty part placeholder
+    documentPartToWriteTo = LAST_PART_PLACEHOLDER;
+  }
 
   let docNameToUse = docName;
   if (documentPartToWriteTo !== LAST_PART_PLACEHOLDER) {
@@ -256,13 +280,15 @@ export async function updateDoc(docName, update) {
   }
 
   try {
-    throw Error("sss");
     await saveUpdateToDb(docNameToUse, update);
   } catch (error) {
     console.log("MICHAL: error", error);
-    if (true) {
-      // TODO: check error
-
+    if (
+      error &&
+      error.errorMessage &&
+      error.errorMessage ===
+        "Item size to update has exceeded the maximum allowed size"
+    ) {
       const nextDocPart =
         documentPartToWriteTo === LAST_PART_PLACEHOLDER
           ? `${docName}${docPartSplitCharacter}1`
@@ -277,21 +303,9 @@ export async function updateDoc(docName, update) {
               Number(documentPartToWriteTo) + 2
             }`;
 
-      await ddb.send(
-        new UpdateItemCommand({
-          TableName: process.env.DOCS_TABLE_NAME,
-          UpdateExpression: "SET LastDocPart = :attrValue",
-          Key: {
-            PartitionKey: {
-              S: docName,
-            },
-          },
-          ExpressionAttributeValues: {
-            ":attrValue": {
-              S: nextDocPart.split(docPartSplitCharacter)[1],
-            },
-          },
-        })
+      await setLastDocPartToDb(
+        docName,
+        nextDocPart.split(docPartSplitCharacter)[1]
       );
 
       await createNewDoc(placeholderDocPart); // Create empty part placeholder
