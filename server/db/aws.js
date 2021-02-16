@@ -1,5 +1,7 @@
-import { DynamoDBClient, PutItemCommand, QueryCommand, DeleteItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb'
+import { BatchGetItemCommand, DynamoDBClient, PutItemCommand, QueryCommand, DeleteItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb'
 import * as Y from 'yjs'
+
+const LAST_PART_PLACEHOLDER = '####'
 
 const ddb = new DynamoDBClient({
   apiVersion: '2012-08-10',
@@ -68,31 +70,62 @@ export async function removeConnection (id) {
   }))
 }
 
-const splitCharacter = '___'
+const docPartSplitCharacter = '_part_'
+const lastOperationSplitCharacter = '___'
 
-export async function getOrCreateDoc (docName) {
-  let loadUntilOperation = false
-  let docNameToUse = docName
-  let loadUntilOperationNo = 0
-  if (docName.includes(splitCharacter)) {
-    loadUntilOperation = true
-    const [docNameId, operationNo] = docName.split(splitCharacter)
-    docNameToUse = docNameId
-    loadUntilOperationNo = operationNo
-  }
-
-
+export async function getDocsEvents (docName, updates = [], part = 0) {
+  let mergedUpdates = updates
+  const partitionKeyValue = part ? `${docName}${docPartSplitCharacter}${part}` : docName
   const { Items } = await ddb.send(new QueryCommand({
     TableName: process.env.DOCS_TABLE_NAME,
     KeyConditionExpression: 'PartitionKey = :partitionkeyval',
     ExpressionAttributeValues: {
       ':partitionkeyval': {
-        S: docNameToUse,
+        S: partitionKeyValue,
       },
     },
   }))
 
-  let dbDoc = Items[0]
+  console.log("MICHAL: part", part);
+
+  if(!Items[0]) return null
+
+  const {Updates, LastDocPart} = Items[0]
+  mergedUpdates = mergedUpdates.concat(Updates.L)
+  console.log("MICHAL: updates", mergedUpdates);
+  console.log("MICHAL: LastDocPart", LastDocPart);
+  if(!LastDocPart || (LastDocPart && LastDocPart.S && LastDocPart.S === LAST_PART_PLACEHOLDER)) {
+    return {
+      Updates: {L: mergedUpdates}
+    }
+  }
+
+  if(LastDocPart && LastDocPart.S) {
+    const lastPart = Number(LastDocPart.S)
+    if(!lastPart) throw new Error('Part should be a number or a placeholder')
+    if(part === lastPart) return {
+      Updated: {L: mergedUpdates}
+    }
+    if(part < lastPart) return await getDocsEvents(docName, mergedUpdates, part + 1)
+  }
+
+}
+
+
+export async function getOrCreateDoc (docName) {
+  console.log("MICHAL: 'HEHEHE'", 'HEHEHE');
+  let loadUntilOperation = false
+  let docNameToUse = docName
+  let loadUntilOperationNo = 0
+  if (docName.includes(lastOperationSplitCharacter)) {
+    loadUntilOperation = true
+    const [docNameId, operationNo] = docName.split(lastOperationSplitCharacter)
+    docNameToUse = docNameId
+    loadUntilOperationNo = operationNo
+  }
+
+  let dbDoc = await getDocsEvents(docNameToUse)
+  console.log("MICHAL: dbDoc", dbDoc);
 
   // Doc not found, create doc
   if (!dbDoc) {
@@ -105,10 +138,13 @@ export async function getOrCreateDoc (docName) {
         Updates: {
           L: [],
         },
+        LastDocPart: {
+          S: LAST_PART_PLACEHOLDER
+        }
       },
     }))
     dbDoc = {
-      Updates: { L: [] }
+      Updates: { L: [] },
     }
   }
 

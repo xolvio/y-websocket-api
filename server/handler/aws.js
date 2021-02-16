@@ -113,8 +113,6 @@ export const handler = ws(
         }))
       }
 
-      const doc = await getOrCreateDoc(docName)
-
       const encoder = encoding.createEncoder()
       const decoder = decoding.createDecoder(message)
       const messageType = decoding.readVarUint(decoder)
@@ -127,9 +125,10 @@ export const handler = ws(
 
           // syncProtocol.readSyncMessage
           const messageType = decoding.readVarUint(decoder)
-
+          let doc = null;
           switch (messageType) {
             case syncProtocol.messageYjsSyncStep1:
+              doc = await getOrCreateDoc(docName)
               syncProtocol.writeSyncStep2(encoder, doc, decoding.readVarUint8Array(decoder))
               // Reply with our state
               if (encoding.length(encoder) > 1) {
@@ -141,7 +140,6 @@ export const handler = ws(
             case syncProtocol.messageYjsSyncStep2:
             case syncProtocol.messageYjsUpdate:
               const update = decoding.readVarUint8Array(decoder)
-              Y.applyUpdate(doc, update)
               await updateDoc(docName, update)
               await broadcast(message)
               break
