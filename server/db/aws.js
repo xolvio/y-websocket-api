@@ -285,8 +285,8 @@ export async function updateDoc(docName, update) {
     console.log("MICHAL: error", error);
     if (
       error &&
-      error.errorMessage &&
-      error.errorMessage ===
+      error.message &&
+      error.message ===
         "Item size to update has exceeded the maximum allowed size"
     ) {
       const nextDocPart =
