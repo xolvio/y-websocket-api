@@ -10,7 +10,7 @@ class WebsocketDynamoDBStack extends Stack {
     super(scope, id, props)
 
     // Initialize API
-  
+
     const name = id + '-api'
     const api = new CfnApi(this, name, {
       name: 'WebsocketApi',
@@ -75,6 +75,7 @@ class WebsocketDynamoDBStack extends Stack {
         DOCS_TABLE_NAME: docsTable.tableName,
         CONNECTIONS_TABLE_NAME: connectionsTable.tableName,
         REGION: config['region'],
+        MESSAGE_MAX_CHUNK_SIZE_IN_BYTES: String(100 * 1024)
       }
     })
 
@@ -91,14 +92,14 @@ class WebsocketDynamoDBStack extends Stack {
     //   maxCapacity: 10,
     //   minCapacity: 2,
     // })
-    
+
     // autoScale.scaleOnUtilization({
     //   utilizationTarget: 0.5,
     //   policyName: id+'-lambda-scaler',
     // })
 
     // Access role for the socket api to access the socket lambda
-  
+
     const policy = new PolicyStatement({
       effect: Effect.ALLOW,
       resources: [
@@ -113,7 +114,7 @@ class WebsocketDynamoDBStack extends Stack {
     role.addToPolicy(policy)
 
     // Integrate lambda with Websocket API
-  
+
     const messageIntegration = new CfnIntegration(this, `${name}-message-route-lambda-integration`, {
       apiId: api.ref,
       integrationType: 'AWS_PROXY',
