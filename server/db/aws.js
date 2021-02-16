@@ -88,6 +88,26 @@ export async function removeConnection(id) {
 const docPartSplitCharacter = "_part_";
 const lastOperationSplitCharacter = "___";
 
+export async function getLastPartFromDoc(docName) {
+  const { Items } = await ddb.send(
+    new QueryCommand({
+      TableName: process.env.DOCS_TABLE_NAME,
+      KeyConditionExpression: "PartitionKey = :partitionkeyval",
+      ProjectionExpression: "LastDocPart",
+      ExpressionAttributeValues: {
+        ":partitionkeyval": {
+          S: docName,
+        },
+      },
+    })
+  );
+
+  return (
+    (Items && Items[0] && Items[0].LastDocPart && Items[0].LastDocPart.S) ||
+    LAST_PART_PLACEHOLDER
+  );
+}
+
 export async function getDocsEvents(
   docName,
   updates = [],
@@ -122,9 +142,8 @@ export async function getDocsEvents(
   }
 
   mergedUpdates = mergedUpdates.concat(Updates.L);
-  console.log("MICHAL: updates", mergedUpdates);
   console.log("MICHAL: LastDocPart", LastDocPart);
-  if (!LastDocPart || lastDocPart === LAST_PART_PLACEHOLDER) {
+  if (lastDocPart === LAST_PART_PLACEHOLDER) {
     return {
       Updates: { L: mergedUpdates },
     };
@@ -133,7 +152,7 @@ export async function getDocsEvents(
   if (lastDocPart) {
     if (part === lastDocPart)
       return {
-        Updated: { L: mergedUpdates },
+        Updates: { L: mergedUpdates },
       };
     if (part < lastDocPart)
       return await getDocsEvents(docName, mergedUpdates, part + 1, lastDocPart);
@@ -208,7 +227,7 @@ export async function getOrCreateDoc(docName) {
   return ydoc;
 }
 
-export async function updateDoc(docName, update) {
+const saveUpdateToDb = async (docName, update) => {
   await ddb.send(
     new UpdateItemCommand({
       TableName: process.env.DOCS_TABLE_NAME,
@@ -225,4 +244,58 @@ export async function updateDoc(docName, update) {
       },
     })
   );
+};
+
+export async function updateDoc(docName, update) {
+  const documentPartToWriteTo = await getLastPartFromDoc(docName);
+  console.log("MICHAL: documentPartToWriteTo", documentPartToWriteTo);
+
+  let docNameToUse = docName;
+  if (documentPartToWriteTo !== LAST_PART_PLACEHOLDER) {
+    docNameToUse = `${docName}${docPartSplitCharacter}${documentPartToWriteTo}`;
+  }
+
+  try {
+    throw Error("sss");
+    await saveUpdateToDb(docNameToUse, update);
+  } catch (error) {
+    console.log("MICHAL: error", error);
+    if (true) {
+      // TODO: check error
+
+      const nextDocPart =
+        documentPartToWriteTo === LAST_PART_PLACEHOLDER
+          ? `${docName}${docPartSplitCharacter}1`
+          : `${docName}${docPartSplitCharacter}${
+              Number(documentPartToWriteTo) + 1
+            }`;
+
+      const placeholderDocPart =
+        documentPartToWriteTo === LAST_PART_PLACEHOLDER
+          ? `${docName}${docPartSplitCharacter}2`
+          : `${docName}${docPartSplitCharacter}${
+              Number(documentPartToWriteTo) + 2
+            }`;
+
+      await ddb.send(
+        new UpdateItemCommand({
+          TableName: process.env.DOCS_TABLE_NAME,
+          UpdateExpression: "SET LastDocPart = :attrValue",
+          Key: {
+            PartitionKey: {
+              S: docName,
+            },
+          },
+          ExpressionAttributeValues: {
+            ":attrValue": {
+              S: nextDocPart.split(docPartSplitCharacter)[1],
+            },
+          },
+        })
+      );
+
+      await createNewDoc(placeholderDocPart); // Create empty part placeholder
+      await saveUpdateToDb(nextDocPart, update);
+    }
+  }
 }
