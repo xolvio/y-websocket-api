@@ -130,24 +130,7 @@ export const handler = ws(
 
           switch (messageType) {
             case syncProtocol.messageYjsSyncStep1:
-              console.log("MICHAL: server sync step 1");
-
-              console.log("MICHAL: doc.getArray('content') 1", doc.getArray('content').length);
-              doc.on('update', (update) => {
-                console.log("MICHAL: update", update);
-              })
-           //   syncProtocol.readSyncStep1(decoder, encoder, doc)
-                const eee = decoding.readVarUint8Array(decoder)
-                console.log("MICHAL: eee", eee);
-
-              const u = Y.encodeStateAsUpdate(doc, eee)
-              encoding.writeVarUint(encoder, syncProtocol.messageYjsSyncStep2);
-              encoding.writeVarUint8Array(encoder, u);
-              console.log("MICHAL: u", u);
-              Y.applyUpdate(doc, u)
-                await updateDoc(docName, u)
-              console.log("MICHAL: doc.getArray('content') 222", doc.getArray('content').length);
-
+              syncProtocol.writeSyncStep2(encoder, doc, decoding.readVarUint8Array(decoder))
               // Reply with our state
               if (encoding.length(encoder) > 1) {
                 console.log("MICHAL: Reply with our state");
@@ -157,7 +140,6 @@ export const handler = ws(
               break
             case syncProtocol.messageYjsSyncStep2:
             case syncProtocol.messageYjsUpdate:
-              console.log("MICHAL: is sync step 2", messageType === syncProtocol.messageYjsSyncStep2);
               const update = decoding.readVarUint8Array(decoder)
               Y.applyUpdate(doc, update)
               await updateDoc(docName, update)
