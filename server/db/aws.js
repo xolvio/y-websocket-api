@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import * as Y from "yjs";
 
-const LAST_PART_PLACEHOLDER = "####";
+const LAST_PART_PLACEHOLDER = "#########";
 
 const ddb = new DynamoDBClient({
   apiVersion: "2012-08-10",
