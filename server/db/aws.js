@@ -1,5 +1,4 @@
 import {
-  BatchGetItemCommand,
   DynamoDBClient,
   PutItemCommand,
   QueryCommand,
@@ -216,11 +215,20 @@ export async function getOrCreateDoc(docName) {
   console.log("MICHAL: updates.length", updates.length);
   let loadUntil = loadUntilOperation ? loadUntilOperationNo : updates.length;
   loadUntil = loadUntil > updates.length ? updates.length : loadUntil;
-  console.log("PINGWING: 121 loadUntil", loadUntil);
+  console.log('PINGWING: 121 loadUntil', loadUntil)
+
+  // console.log('PINGWING: 220 before merge update')
+  // const mergedUpdate = Y.mergeUpdates(updates.slice(0, loadUntil))
+  // console.log('PINGWING: 220 after merge update')
 
   for (let i = 0; i < loadUntil; i++) {
-    Y.applyUpdate(ydoc, updates[i]);
+    if (i%1000 === 0) {
+      console.log('PINGWING: 127 loading operations, current i', i)
+    }
+    Y.applyUpdate(ydoc, updates[i])
   }
+
+  console.log('PINGWING: 132 loaded all operations: loadUntil', loadUntil)
 
   //ydoc.getArray('content').forEach(c => console.log([...c.entries()]))
 
