@@ -217,17 +217,12 @@ export async function getOrCreateDoc(docName) {
   loadUntil = loadUntil > updates.length ? updates.length : loadUntil;
   console.log('PINGWING: 121 loadUntil', loadUntil)
 
-  // console.log('PINGWING: 220 before merge update')
-  // const mergedUpdate = Y.mergeUpdates(updates.slice(0, loadUntil))
-  // console.log('PINGWING: 220 after merge update')
+  console.log('PINGWING: 220 before merge update')
+  const mergedUpdate = Y.mergeUpdates(updates.slice(0, loadUntil))
+  console.log('PINGWING: 220 after merge update')
 
-  for (let i = 0; i < loadUntil; i++) {
-    if (i%1000 === 0) {
-      console.log('PINGWING: 127 loading operations, current i', i)
-    }
-    Y.applyUpdate(ydoc, updates[i])
-  }
-
+  console.log('PINGWING: 132 before loading all operation to ydoc', loadUntil)
+  Y.applyUpdate(ydoc, mergedUpdate)
   console.log('PINGWING: 132 loaded all operations: loadUntil', loadUntil)
 
   //ydoc.getArray('content').forEach(c => console.log([...c.entries()]))

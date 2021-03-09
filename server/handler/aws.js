@@ -1,4 +1,3 @@
-import * as Y from 'yjs'
 // @ts-ignore
 import syncProtocol from 'y-protocols/dist/sync.cjs'
 // @ts-ignore
