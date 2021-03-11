@@ -6,8 +6,10 @@ import {
   UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import * as Y from "yjs";
+import { toBase64 } from 'lib0/dist/buffer.cjs'
 
 const LAST_PART_PLACEHOLDER = "####";
+const CACHED_VERSION_POSTFIX = "_cached";
 
 const ddb = new DynamoDBClient({
   apiVersion: "2012-08-10",
@@ -107,6 +109,21 @@ export async function getLastPartFromDoc(docName) {
   );
 }
 
+let getItems = async function (partitionKeyValue) {
+  const { Items } = await ddb.send(
+    new QueryCommand({
+      TableName: process.env.DOCS_TABLE_NAME,
+      KeyConditionExpression: 'PartitionKey = :partitionkeyval',
+      ExpressionAttributeValues: {
+        ':partitionkeyval': {
+          S: partitionKeyValue,
+        },
+      },
+    })
+  )
+  return Items
+}
+
 export async function getDocsEvents(
   docName,
   updates = [],
@@ -117,31 +134,79 @@ export async function getDocsEvents(
   const partitionKeyValue = part
     ? `${docName}${docPartSplitCharacter}${part}`
     : docName;
-  const { Items } = await ddb.send(
-    new QueryCommand({
-      TableName: process.env.DOCS_TABLE_NAME,
-      KeyConditionExpression: "PartitionKey = :partitionkeyval",
-      ExpressionAttributeValues: {
-        ":partitionkeyval": {
-          S: partitionKeyValue,
-        },
-      },
-    })
-  );
 
-  console.log("MICHAL: part", part);
+  let Items  = []
+  if (part === 0 || part === lastDocPart) {
+    Items = await getItems(partitionKeyValue)
 
-  if (!Items[0]) return null; // If the data if not correct return an empty array
-
-  const { Updates, LastDocPart } = Items[0];
-  if (LastDocPart && LastDocPart.S && LastDocPart.S !== LAST_PART_PLACEHOLDER) {
-    const lastPart = Number(LastDocPart.S);
-    if (!lastPart) throw new Error("Part should be a number or a placeholder");
-    lastDocPart = lastPart;
+    if (part === 0) {
+      const { LastDocPart } = Items[0];
+      if (LastDocPart && LastDocPart.S && LastDocPart.S !== LAST_PART_PLACEHOLDER) {
+        const lastPart = Number(LastDocPart.S);
+        if (!lastPart) throw new Error("Part should be a number or a placeholder");
+        lastDocPart = lastPart;
+      }
+    }
   }
 
+  console.log("MICHAL: part", part);
+  console.log('PINGWING: 153 lastDocPart', lastDocPart);
+  console.log('PINGWING: 143 reading partitionKeyValue', partitionKeyValue);
+  console.log('PINGWING: 144 Items', Items);
+
+  // if (!Items[0]) return null; // If the data if not correct return an empty array
+
+  console.log('PINGWING: 153 lastDocPart', lastDocPart);
+  if (lastDocPart > 0 && part < lastDocPart) {
+    const cachedPartitionKeyValue = partitionKeyValue + CACHED_VERSION_POSTFIX
+    console.log('PINGWING: 155 cachedPartitionKeyValue', cachedPartitionKeyValue);
+
+    const cachedData = await ddb.send(
+      new QueryCommand({
+        TableName: process.env.DOCS_TABLE_NAME,
+        KeyConditionExpression: "PartitionKey = :partitionkeyval",
+        ExpressionAttributeValues: {
+          ":partitionkeyval": {
+            S: cachedPartitionKeyValue,
+          },
+        },
+      })
+    );
+    console.log('PINGWING: 167 cachedData', cachedData);
+    const weHaveACachedVersion = cachedData && cachedData.Items && cachedData.Items.length > 0
+    console.log('PINGWING: 171 weHaveACachedVersion', weHaveACachedVersion);
+
+    if (weHaveACachedVersion) {
+      const { Updates } = cachedData.Items[0];
+
+      mergedUpdates = mergedUpdates.concat(Updates.L);
+
+      return await getDocsEvents(docName, mergedUpdates, part + 1, lastDocPart);
+    } else  {
+      const notCachedUpdates = await getItems(partitionKeyValue)
+      const { Updates } = notCachedUpdates[0];
+
+      // merge updates and save them
+      const updates = Updates.L.map(
+        (_) => new Uint8Array(Buffer.from(_.B, "base64"))
+      );
+
+      const mergedUpdate = Y.mergeUpdates(updates)
+
+      await createNewDoc(cachedPartitionKeyValue); // Create empty part placeholder
+      await saveUpdateToDb(cachedPartitionKeyValue, mergedUpdate);
+
+      const mergedUpdateBase64 = toBase64(mergedUpdate)
+
+      mergedUpdates = mergedUpdates.concat([{B: mergedUpdateBase64}]);
+
+      return await getDocsEvents(docName, mergedUpdates, part + 1, lastDocPart);
+    }
+  }
+
+  const { Updates } = Items[0];
+
   mergedUpdates = mergedUpdates.concat(Updates.L);
-  console.log("MICHAL: LastDocPart", LastDocPart);
   if (lastDocPart === LAST_PART_PLACEHOLDER) {
     return {
       Updates: { L: mergedUpdates },
@@ -159,6 +224,7 @@ export async function getDocsEvents(
 }
 
 export async function createNewDoc(docName, withPlaceholder = false) {
+  console.log('PINGWING: 213 createNewDoc docName', docName);
   await ddb.send(
     new PutItemCommand({
       TableName: process.env.DOCS_TABLE_NAME,
@@ -182,7 +248,7 @@ export async function createNewDoc(docName, withPlaceholder = false) {
 }
 
 export async function getOrCreateDoc(docName) {
-  console.log("MICHAL: 'HEHEHE'", "HEHEHE");
+  console.log("MICHAL: STARTING getOrCreateDoc");
   let loadUntilOperation = false;
   let docNameToUse = docName;
   let loadUntilOperationNo = 0;
@@ -193,7 +259,7 @@ export async function getOrCreateDoc(docName) {
     loadUntilOperationNo = operationNo;
   }
 
-  let dbDoc = await getDocsEvents(docNameToUse);
+  let dbDoc = await getDocsEvents(docNameToUse, loadUntilOperation);
   console.log("MICHAL: dbDoc", dbDoc);
 
   // Doc not found, create doc
@@ -212,7 +278,7 @@ export async function getOrCreateDoc(docName) {
 
   const ydoc = new Y.Doc();
 
-  console.log("MICHAL: updates.length", updates.length);
+  console.log("MICHAL: OPERATIONS COUNT", updates.length);
   let loadUntil = loadUntilOperation ? loadUntilOperationNo : updates.length;
   loadUntil = loadUntil > updates.length ? updates.length : loadUntil;
   console.log('PINGWING: 121 loadUntil', loadUntil)
@@ -225,12 +291,12 @@ export async function getOrCreateDoc(docName) {
   Y.applyUpdate(ydoc, mergedUpdate)
   console.log('PINGWING: 132 loaded all operations: loadUntil', loadUntil)
 
-  //ydoc.getArray('content').forEach(c => console.log([...c.entries()]))
-
+  console.log('PINGWING: 296 FINISHING getOrCreateDoc');
   return ydoc;
 }
 
 const saveUpdateToDb = async (docName, update) => {
+  console.log('PINGWING: 287 saveUpdateToDb docName', docName);
   await ddb.send(
     new UpdateItemCommand({
       TableName: process.env.DOCS_TABLE_NAME,
