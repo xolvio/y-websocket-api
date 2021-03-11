@@ -185,11 +185,13 @@ export async function getDocsEvents(
     console.log('PINGWING: 171 weHaveACachedVersion', weHaveACachedVersion)
 
     if (weHaveACachedVersion) {
+      console.log('PINGWING: 188 using already existing cache for part', part)
       const { Updates } = cachedDataItems[0]
       mergedUpdates = mergedUpdates.concat(Updates.L)
 
       return await getDocsEvents(docName, mergedUpdates, part + 1, lastDocPart)
     } else  {
+      console.log('PINGWING: 194 creating cache for part', part)
       const mergedUpdateBase64 = await createAndGetCachedVersionForThisPart(thisPartKey)
       mergedUpdates = mergedUpdates.concat([{B: mergedUpdateBase64}])
 
