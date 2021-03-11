@@ -259,7 +259,7 @@ export async function getOrCreateDoc(docName) {
     loadUntilOperationNo = operationNo;
   }
 
-  let dbDoc = await getDocsEvents(docNameToUse, loadUntilOperation);
+  let dbDoc = await getDocsEvents(docNameToUse);
   console.log("MICHAL: dbDoc", dbDoc);
 
   // Doc not found, create doc
