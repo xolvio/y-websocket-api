@@ -24,7 +24,7 @@
     "patch-package": "^6.2.2",
     "utf-8-validate": "^5.0.4",
     "y-protocols": "^1.0.2",
-    "yjs": "^13.4.9"
+    "yjs": "^13.4.14"
   },
   "devDependencies": {
     "@babel/cli": "^7.12.10",
